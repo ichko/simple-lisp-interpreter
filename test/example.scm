@@ -25,4 +25,3 @@
   (print (twice 5))
   (print fact)
 )
-

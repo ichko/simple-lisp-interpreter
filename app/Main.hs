@@ -1,6 +1,7 @@
 module Main where
 
-import Lib
+import SLispParser
 
 main :: IO ()
-main = someFunc
+main = do
+  print "hello world"

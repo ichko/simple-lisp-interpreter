@@ -4,13 +4,13 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c31401c08357d9fac9eb9ea76b1ccca7c39c31bba277c898cbbc42be306e1a00
+-- hash: 8065f6bb1e351f3350bf6935080728a68004643cac6c4a5e6a0d9fd281acd717
 
-name:           haskell-interpreter
+name:           simple-lisp-interpreter
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/haskell-interpreter#readme>
-homepage:       https://github.com/githubuser/haskell-interpreter#readme
-bug-reports:    https://github.com/githubuser/haskell-interpreter/issues
+description:    Please see the README on GitHub at <https://github.com/githubuser/simple-lisp-interpreter#readme>
+homepage:       https://github.com/githubuser/simple-lisp-interpreter#readme
+bug-reports:    https://github.com/githubuser/simple-lisp-interpreter/issues
 author:         Author name here
 maintainer:     example@example.com
 copyright:      2020 Author name here
@@ -23,43 +23,42 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/githubuser/haskell-interpreter
+  location: https://github.com/githubuser/simple-lisp-interpreter
 
 library
   exposed-modules:
-      ExampleAST
       Lib
       Parser
       SLispParser
   other-modules:
-      Paths_haskell_interpreter
+      Paths_simple_lisp_interpreter
   hs-source-dirs:
       src
   build-depends:
       base >=4.7 && <5
   default-language: Haskell2010
 
-executable haskell-interpreter-exe
+executable simple-lisp-interpreter-exe
   main-is: Main.hs
   other-modules:
-      Paths_haskell_interpreter
+      Paths_simple_lisp_interpreter
   hs-source-dirs:
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
-    , haskell-interpreter
+    , simple-lisp-interpreter
   default-language: Haskell2010
 
-test-suite haskell-interpreter-test
+test-suite simple-lisp-interpreter-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      Paths_haskell_interpreter
+      Paths_simple_lisp_interpreter
   hs-source-dirs:
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
-    , haskell-interpreter
+    , simple-lisp-interpreter
   default-language: Haskell2010

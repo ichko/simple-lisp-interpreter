@@ -1,13 +1,17 @@
 module SLispParser where
 
 import Control.Applicative
-import Data.Char
+  ( Alternative (many, some, (<|>)),
+  )
+import Data.Char (isAlphaNum)
 import Parser
 import Prelude hiding (span)
 
 type Identifier = String
 
-type Program = [Expression]
+newtype Program
+  = Program [Expression]
+  deriving (Show)
 
 data Expression
   = Constant Value
@@ -44,14 +48,13 @@ expression =
     <|> application
 
 args :: Parser [Identifier]
-args =
-  ws *> inBrackets (separated someWS identifier) <* ws
+args = ws *> inBrackets (separated someWS identifier) <* ws
 
 variable :: Parser Expression
 variable = inDef $ Variable <$> (identifier <* someWS) <*> expression
 
 functionId :: Parser [Char]
-functionId = defaultP "" identifier
+functionId = defaultP "\\" identifier
 
 function :: Parser Expression
 function = inDef $ Function <$> functionId <*> args <*> some expression
@@ -62,7 +65,10 @@ application =
     Application <$> identifier <*> many (someWS *> expression)
 
 program :: Parser Program
-program = ws *> some (expression <* ws)
+program = ws *> (Program <$> some (expression <* ws))
+
+instance Parseable Program where
+  parser = program
 
 parseFile :: FilePath -> IO (ParserResult Program)
 parseFile path = do
@@ -70,21 +76,18 @@ parseFile path = do
   let parsed = runParser program code
   return parsed
 
-main :: IO ()
-main = do
-  print $ runParser program "(def a 5)"
-  print $ runParser program "(def a t)"
-  print $ runParser program "(def a (def b 1))"
-  print $ runParser program "(def a (sum))"
-  print $ runParser program "(def a (sum 1))"
-  print $ runParser program "(def a (sum 1 ab (+ 1 1)))"
-
-  print $ runParser program "(def () (a))"
-  print $ runParser program "(def (ab cd) 1)"
-
-  print $ runParser program "(def (ab cd) (c d))"
-
-  print $ runParser program "(def sum (ab c) a)"
+main' :: IO ()
+main' = do
+  print $ runParser program "(define a 5)"
+  print $ runParser program "(define a t)"
+  print $ runParser program "(define a (def b 1))"
+  print $ runParser program "(define a (sum))"
+  print $ runParser program "(define a (sum 1))"
+  print $ runParser program "(define a (sum 1 ab (+ 1 1)))"
+  print $ runParser program "(define () (a))"
+  print $ runParser program "(define (ab cd) 1)"
+  print $ runParser program "(define (ab cd) (c d))"
+  print $ runParser program "(define sum (ab c) a)"
 
   program <- parseFile "example.scm"
   print program
