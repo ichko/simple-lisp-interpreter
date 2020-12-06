@@ -1,195 +1,83 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
-
 module Parser where
 
-import Control.Applicative (Alternative (empty, many, (<|>)))
-import Data.Bifunctor (Bifunctor (second))
-import Data.Char (isAlphaNum, isDigit, isSpace, ord)
+import Control.Applicative
+  ( Alternative (many, some, (<|>)),
+  )
+import Data.Char (isAlphaNum)
+import ParserUtils
+import Specification
 import Prelude hiding (span)
-import qualified Prelude
 
-newtype ParserError
-  = GeneralError String
-  deriving (Show)
+inBrackets :: Parser a -> Parser a
+inBrackets p = char '(' *> ws *> p <* ws <* char ')'
 
-abort :: String -> Either ParserError b
-abort = Left . GeneralError
+inDef :: Parser a -> Parser a
+inDef p = inBrackets (string "define" *> ws *> p)
 
-type ParserResult a = Either ParserError (String, a)
+identifier :: Parser Identifier
+identifier = atLeast $ \c -> isAlphaNum c || c `elem` "+-*/><='"
 
-newtype Parser a = Parser
-  { runParser :: String -> ParserResult a
-  }
+value :: Parser Value
+value =
+  orChain
+    <|> IntValue <$> integer
+    <|> BoolValue <$> bool
+    <|> StringValue <$> stringLiteral
+    <|> ListValue <$> list expression
 
-abortParser :: String -> Parser a
-abortParser error = Parser $ \_ -> abort error
+expression :: Parser Expression
+expression =
+  orChain
+    <|> Constant <$> value
+    <|> Reference <$> identifier
+    <|> variable
+    <|> function
+    <|> application
 
-char :: Char -> Parser Char
-char c = cond (== c)
+args :: Parser [Identifier]
+args = ws *> inBrackets (separated someWS identifier) <* ws
 
-cond :: (Char -> Bool) -> Parser Char
-cond c = Parser $
-  \case
-    (h : t) | c h -> Right (t, h)
-    _ -> abort "could not parse with condition"
+variable :: Parser Expression
+variable = inDef $ Variable <$> (identifier <* someWS) <*> expression
 
-nom :: Parser Char
-nom = cond $ const True
+functionId :: Parser [Char]
+functionId = defaultP "\\" identifier
 
-nomAll :: Parser String
-nomAll = many nom
+function :: Parser Expression
+function = inDef $ Function <$> functionId <*> args <*> some (expression <* ws)
 
-instance Functor Parser where
-  fmap mapper parser =
-    Parser $ fmap (second mapper) . runParser parser
+application :: Parser Expression
+application =
+  inBrackets $
+    Application <$> identifier <*> many (someWS *> expression)
 
-instance Applicative Parser where
-  pure a = Parser $ Right . (,a)
-  Parser fp <*> Parser vp = Parser $ \i -> do
-    (i', f) <- fp i
-    (i'', v) <- vp i'
-    return (i'', f v)
+program :: Parser Program
+program = ws *> (Program <$> some (expression <* ws))
 
-instance Monad Parser where
-  Parser p >>= func = Parser $ \i -> do
-    (i', a) <- p i
-    runParser (func a) i'
+instance Parseable Program where
+  parser = program
 
-instance Alternative Parser where
-  empty = Parser $ \_ -> abort ""
-  Parser pa <|> Parser pb = Parser $ \i ->
-    case pa i of
-      Left _ -> pb i
-      result -> result
-
-tryRead :: Read a => String -> Parser a
-tryRead string = do
-  case reads string of
-    [(value, _)] -> return value
-    _ -> abortParser "could not read value"
-
-bool :: Parser Bool
-bool =
-  (string "True" <|> string "False") >>= tryRead
-
-string :: String -> Parser String
-string = mapM char
-
-span :: (Char -> Bool) -> Parser String
-span predicate = Parser $ \i ->
-  let (matched, rest) = Prelude.span predicate i in Right (rest, matched)
-
-alphaNum :: Parser String
-alphaNum = span isAlphaNum
-
-stringLiteral :: Parser String
-stringLiteral = char '"' *> span (/= '"') <* char '"'
-
-natural :: Parser Integer
-natural = do
-  list <- reads <$> span isDigit
-  case list of
-    [(number, _)] -> return number
-    _ -> abortParser "could not parse number"
-
-ws :: Parser String
-ws = span isSpace
-
-someWS :: Parser String
-someWS = cond isSpace *> ws
-
-atLeast :: (Char -> Bool) -> Parser String
-atLeast pred = (:) <$> cond pred <*> span pred
-
-nonWS :: Parser String
-nonWS = span (not . isSpace)
-
-idP :: Parser ()
-idP = pure ()
-
-orChain :: Parser a
-orChain = abortParser "orChain parser invoked"
-
-integer :: Parser Integer
-integer =
-  idP
-    *> natural
-    <|> negate
-    <$> (char '-' *> ws *> natural)
-
-separated :: Parser a -> Parser b -> Parser [b]
-separated separator element =
-  (:) <$> element <*> many (separator *> element) <|> pure []
-
-defaultP :: a -> Parser a -> Parser a
-defaultP def p = p <|> pure def
-
-split :: String -> Parser b -> Parser [b]
-split separator =
-  separated (ws *> string separator <* ws)
-
-list :: Parser b -> Parser [b]
-list elementParser =
-  char '[' *> ws *> split "," elementParser <* ws <* char ']'
-
-intList :: Parser [Integer]
-intList = list integer
-
-intList' :: Parser [[Integer]]
-intList' = list intList
-
-end :: Parser ()
-end = (*>) ws $
-  Parser $ \case
-    [] -> Right ([], ())
-    _ -> abort "expected end of string"
-
-class Parseable p where
-  parser :: Parser p
-
-instance Parseable Integer where
-  parser = integer
-
-instance Parseable Int where
-  parser = fromIntegral <$> integer
-
-instance Parseable Char where
-  parser = nom
-
-instance Parseable String where
-  parser = nomAll
-
-instance Parseable a => Parseable [a] where
-  parser = list parser
-
-instance Parseable Bool where
-  parser = bool
-
-parse :: Parseable p => String -> p
-parse input =
-  case runParser parser input of
-    Left err -> error $ show err
-    Right (_rest, value) -> value
+parseFile :: FilePath -> IO (ParserResult Program)
+parseFile path = do
+  code <- readFile path
+  let parsed = runParser program code
+  return parsed
 
 main' :: IO ()
 main' = do
-  print $ runParser (char 'c') "cow-say moo"
-  print $ runParser (ord <$> char 'c') "cows"
-  print $ runParser (ord <$> char 'y' <* char 'x') "yxz"
+  print (parse "(define a 5)" :: Program)
+  print $ runParser program "(define a t)"
+  print $ runParser program "(define a \"ala bala\")"
+  print $ runParser program "(define a [\"ala bala\", 1, True])"
+  print $ runParser program "(define t [1, (define () (a))])"
+  print $ runParser program "(define a (def b 1))"
+  print $ runParser program "(define a (sum))"
+  print $ runParser program "(define a (sum 1))"
+  print $ runParser program "(define a (sum 1 ab (+ 1 1)))"
+  print $ runParser program "(define () (a))"
+  print $ runParser program "(define (ab cd) 1)"
+  print $ runParser program "(define (ab cd) (c d))"
+  print $ runParser program "(define sum (ab c) a)"
 
-  print $ runParser (string "world") "world, hello"
-
-  print $ runParser bool "True and stuff"
-  print $ runParser bool "False and stuff"
-  print $ runParser bool "nothing and stuff"
-
-  print $ runParser (span isDigit) "1234abcd321"
-  print $ runParser natural "1234abcd321"
-  print $ runParser natural "abcd321"
-
-  print $ runParser (list bool) "[ True,   False , False  ] test"
-
-  print $ runParser intList' "[ [12],  [ 54 , 23]  ]dsa"
-  print $ runParser intList' "[ [12],  [ 54 , [23]  ]dsa"
+  program <- parseFile "example.scm"
+  print program
