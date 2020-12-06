@@ -1,4 +1,4 @@
-import SLispParser
+import Parser
 
 main :: IO ()
 main = do
