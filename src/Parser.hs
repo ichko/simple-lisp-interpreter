@@ -45,7 +45,7 @@ value =
 expression :: Parser S.Expression
 expression =
   orChain
-    <|> S.Constant <$> value
+    <|> S.Atom <$> value
     <|> S.Reference <$> identifier
     <|> variable
     <|> function

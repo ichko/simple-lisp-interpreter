@@ -1,106 +1,112 @@
 module Interpreter where
 
-import Parser ()
-import qualified ParserUtils as P
+import Parser (parseFile)
+import ParserUtils as P
 import Specification
 
-lookupCtx :: Context -> Identifier -> Either Error Expression
-lookupCtx ctx identifier =
-  case lookup identifier ctx of
+data ContextVal
+  = Native Expression
+  | External [Identifier] (Environment -> Either Error Value)
+
+getContextValArgs :: ContextVal -> [Identifier]
+getContextValArgs (Native (Function _ args _)) = args
+getContextValArgs (External args _) = args
+getContextValArgs _ = []
+
+type Environment = [(Identifier, ContextVal)]
+
+evalContextVal :: ContextVal -> Environment -> Either Error Value
+evalContextVal (Native expr) env = eval env expr
+evalContextVal (External _ f) env = f env
+
+evalFromEnv :: Identifier -> Environment -> Either Error Value
+evalFromEnv identifier env =
+  case lookup identifier env of
     Nothing -> Left $ "identifier not found " ++ identifier
-    Just expression -> Right expression
+    Just contextVal -> evalContextVal contextVal env
 
-evalFunction :: Context -> Expression -> Either Error Value
-evalFunction ctx f@(Function name _args expressions) =
-  iterate referentialCtx expressions
+evalFunction :: Environment -> Expression -> Either Error Value
+evalFunction env f@(Function name _args expressions) =
+  iterate ((name, Native f) : env) expressions
   where
-    referentialCtx = (name, f) : ctx
-
-    iterate _ctx [] = Left "function with no body called"
-    iterate ctx [expr] = eval ctx expr
-    iterate ctx (expr : t) =
+    iterate :: Environment -> [Expression] -> Either Error Value
+    iterate _env [] = Left "function with no body called"
+    iterate env [expr] = eval env expr
+    iterate env (expr : t) =
       case expr of
-        v@(Variable id _) -> iterate ((id, v) : ctx) t
-        f@(Function id _ _) -> iterate ((id, f) : ctx) t
-        _ -> iterate ctx t
+        v@(Variable id _) -> iterate ((id, Native v) : env) t
+        f@(Function id _ _) -> iterate ((id, Native f) : env) t
+        _ -> iterate env t
 
-eval :: Context -> Expression -> Either Error Value
-eval _ (Constant val) = Right val
-eval ctx (Reference id) = do
-  expression <- lookupCtx ctx id
-  eval ctx expression
-eval ctx (Variable _id expression) = eval ctx expression
-eval ctx (Application id args) = do
-  expression <- lookupCtx ctx id
-  case expression of
-    (Constant (FunctionValue _ f)) -> f ctx args
-    f@(Function _ argNames _) ->
-      let paramsCtx = zip argNames args ++ ctx in eval paramsCtx f
+eval :: Environment -> Expression -> Either Error Value
+eval _ (Atom val) = Right val
+eval env (Reference id) = evalFromEnv id env
+eval env (Variable _id expression) = eval env expression
+eval env (Application id args) = do
+  case lookup id env of
+    (Just contextVal) ->
+      let paramsEnv = zip (getContextValArgs contextVal) (map Native args) ++ env
+       in evalContextVal contextVal paramsEnv
     _ -> Left $ "trying to call undefined function " ++ id
 eval ctx expr = evalFunction ctx expr
 
-binInt :: (Integer -> Integer -> Integer) -> ValueFunction
-binInt op ctx params = do
-  vals <- mapM (eval ctx) params
-  let [IntValue a, IntValue b] = vals
-  return (IntValue $ op a b)
+unaryFunc :: (Value -> a) -> (b -> Value) -> (a -> b) -> ContextVal
+unaryFunc unpackA packB op = External ["a", "b"] $ \env -> do
+  a <- evalFromEnv "a" env
+  let _a = unpackA a
+  return . packB $ op _a
 
-binBool :: (Bool -> Bool -> Bool) -> ValueFunction
-binBool op ctx params = do
-  vals <- mapM (eval ctx) params
-  let [BoolValue a, BoolValue b] = vals
-  return (BoolValue $ op a b)
+binFunc :: (Value -> a) -> (Value -> b) -> (c -> Value) -> (a -> b -> c) -> ContextVal
+binFunc unpackA unpackB packC op = External ["a", "b"] $ \env -> do
+  a <- evalFromEnv "a" env
+  b <- evalFromEnv "b" env
+  let _a = unpackA a
+      _b = unpackB b
+  return . packC $ op _a _b
 
-binIntBool :: (Integer -> Integer -> Bool) -> ValueFunction
-binIntBool op ctx params = do
-  vals <- mapM (eval ctx) params
-  let [IntValue a, IntValue b] = vals
-  return (BoolValue $ op a b)
-
-ifFunc :: ValueFunction
-ifFunc ctx [condition, first, second] = do
-  wrappedTest <- eval ctx condition
-  let (BoolValue test) = wrappedTest
+ifFunc :: ContextVal
+ifFunc = External ["test", "if", "then"] $ \env -> do
+  testExpr <- evalFromEnv "test" env
+  let test = unpackBool testExpr
   if test
-    then eval ctx first
-    else eval ctx second
+    then evalFromEnv "if" env
+    else evalFromEnv "then" env
 
-printFunc :: ValueFunction
-printFunc ctx params = do
-  vals <- mapM (eval ctx) params
-  return . StringValue . show $ vals
+printFunc :: ContextVal
+printFunc = External ["x"] $ \env -> do
+  x <- evalFromEnv "x" env
+  return . StringValue . show $ x
 
-stdEnv :: [(Identifier, ValueFunction)]
+unpackInt :: Value -> Integer
+unpackInt (IntValue a) = a
+
+unpackBool :: Value -> Bool
+unpackBool (BoolValue a) = a
+
+stdEnv :: [(Identifier, ContextVal)]
 stdEnv =
-  [ ("+", binInt (+)),
-    ("-", binInt (-)),
-    ("*", binInt (*)),
-    ("/", binInt div),
+  [ ("+", binFunc unpackInt unpackInt IntValue (+)),
+    ("-", binFunc unpackInt unpackInt IntValue (-)),
+    ("*", binFunc unpackInt unpackInt IntValue (*)),
+    ("/", binFunc unpackInt unpackInt IntValue div),
     --
-    (">", binIntBool (>)),
-    ("<", binIntBool (<)),
-    (">=", binIntBool (>=)),
-    ("<=", binIntBool (<=)),
-    ("==", binIntBool (==)),
-    ("!=", binIntBool (/=)),
+    (">", binFunc unpackInt unpackInt BoolValue (>)),
+    ("<", binFunc unpackInt unpackInt BoolValue (<)),
+    (">=", binFunc unpackInt unpackInt BoolValue (>=)),
+    ("<=", binFunc unpackInt unpackInt BoolValue (<=)),
+    ("==", binFunc unpackInt unpackInt BoolValue (==)),
+    ("!=", binFunc unpackInt unpackInt BoolValue (/=)),
     --
-    ("&&", binBool (&&)),
-    ("||", binBool (||)),
+    ("&&", binFunc unpackBool unpackBool BoolValue (&&)),
+    ("||", binFunc unpackBool unpackBool BoolValue (||)),
+    ("~", unaryFunc unpackBool BoolValue not),
     --
     ("if", ifFunc),
     ("print", printFunc)
   ]
 
-stdCtx :: [(Identifier, Expression)]
-stdCtx =
-  map
-    ( \(id, func) ->
-        (id, Constant . FunctionValue id $ func)
-    )
-    stdEnv
-
 evalProgram :: Program -> Either Error Value
-evalProgram (Program program) = eval stdCtx rootExpr
+evalProgram (Program program) = eval stdEnv rootExpr
   where
     rootExpr = Function "#" [] program
 
@@ -115,5 +121,6 @@ interpretFile path = do
 
 main :: IO ()
 main = do
-  print $ interpret "(define a 2)"
-  print $ interpret "(define a (+ 2 2)) (define a (+ 2 3))"
+  -- print $ interpret "(define a 2)"
+  -- print $ interpret "(define a (+ 2 2)) (define a (+ 2 3))"
+  print $ interpret "(define ++ (a) (+ 1 a)) (++ 4)"

@@ -19,7 +19,8 @@
 )
 
 (define main ()
-  (define ten (twice 5))
-  (print [(fib 5), (fact 6), ten])
+  ; (define ten (twice 5))
+  ; (print [(fib 5), (fact 6), ten])
+  (fib 5)
 )
 

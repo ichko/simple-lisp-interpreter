@@ -1,6 +1,6 @@
-import Parser
+import Interpreter
 
 main :: IO ()
 main = do
-  program <- parseFile "test/example.scm"
+  program <- interpretFile "test/example.scm"
   print program
