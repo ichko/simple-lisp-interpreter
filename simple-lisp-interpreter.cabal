@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d747d9a9a8a2a4d74cf0059c8f2762cd311ad90fb555896e4ecd776066b4a51f
+-- hash: f6c1f0eb76ed2f6a2cc6837c418e6e71764c6539ca7a07442e1c040945cdbb07
 
 name:           simple-lisp-interpreter
 version:        0.1.0.0
@@ -32,7 +32,6 @@ library
       Parser
       ParserUtils
       Specification
-      Std
   other-modules:
       Paths_simple_lisp_interpreter
   hs-source-dirs:

@@ -5,7 +5,24 @@ import Control.Applicative
   )
 import Data.Char (isAlphaNum)
 import ParserUtils
-import Specification
+  ( Parseable (..),
+    Parser (runParser),
+    ParserResult,
+    atLeast,
+    bool,
+    char,
+    defaultP,
+    integer,
+    list,
+    orChain,
+    parse,
+    separated,
+    someWS,
+    string,
+    stringLiteral,
+    ws,
+  )
+import qualified Specification as S
 import Prelude hiding (span)
 
 inBrackets :: Parser a -> Parser a
@@ -14,50 +31,50 @@ inBrackets p = char '(' *> ws *> p <* ws <* char ')'
 inDef :: Parser a -> Parser a
 inDef p = inBrackets (string "define" *> ws *> p)
 
-identifier :: Parser Identifier
+identifier :: Parser S.Identifier
 identifier = atLeast $ \c -> isAlphaNum c || c `elem` "+-*/><='"
 
-value :: Parser Value
+value :: Parser S.Value
 value =
   orChain
-    <|> IntValue <$> integer
-    <|> BoolValue <$> bool
-    <|> StringValue <$> stringLiteral
-    <|> ListValue <$> list expression
+    <|> S.IntValue <$> integer
+    <|> S.BoolValue <$> bool
+    <|> S.StringValue <$> stringLiteral
+    <|> S.ListValue <$> list expression
 
-expression :: Parser Expression
+expression :: Parser S.Expression
 expression =
   orChain
-    <|> Constant <$> value
-    <|> Reference <$> identifier
+    <|> S.Constant <$> value
+    <|> S.Reference <$> identifier
     <|> variable
     <|> function
     <|> application
 
-args :: Parser [Identifier]
+args :: Parser [S.Identifier]
 args = ws *> inBrackets (separated someWS identifier) <* ws
 
-variable :: Parser Expression
-variable = inDef $ Variable <$> (identifier <* someWS) <*> expression
+variable :: Parser S.Expression
+variable = inDef $ S.Variable <$> (identifier <* someWS) <*> expression
 
 functionId :: Parser [Char]
 functionId = defaultP "\\" identifier
 
-function :: Parser Expression
-function = inDef $ Function <$> functionId <*> args <*> some (expression <* ws)
+function :: Parser S.Expression
+function = inDef $ S.Function <$> functionId <*> args <*> some (expression <* ws)
 
-application :: Parser Expression
+application :: Parser S.Expression
 application =
   inBrackets $
-    Application <$> identifier <*> many (someWS *> expression)
+    S.Application <$> identifier <*> many (someWS *> expression)
 
-program :: Parser Program
-program = ws *> (Program <$> some (expression <* ws))
+program :: Parser S.Program
+program = ws *> (S.Program <$> some (expression <* ws))
 
-instance Parseable Program where
+instance Parseable S.Program where
   parser = program
 
-parseFile :: FilePath -> IO (ParserResult Program)
+parseFile :: FilePath -> IO (ParserResult S.Program)
 parseFile path = do
   code <- readFile path
   let parsed = runParser program code
@@ -65,7 +82,7 @@ parseFile path = do
 
 main' :: IO ()
 main' = do
-  print (parse "(define a 5)" :: Program)
+  print (parse "(define a 5)" :: S.Program)
   print $ runParser program "(define a t)"
   print $ runParser program "(define a \"ala bala\")"
   print $ runParser program "(define a [\"ala bala\", 1, True])"
