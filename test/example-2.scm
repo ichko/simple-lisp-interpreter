@@ -1,7 +1,7 @@
-(define two 2)
+(define (two) 2)
 
-(define five () (+ 3 two))
+(define (five) (+ 3 (two)))
 
-(define ++ (a) (+ 4 a))
+(define (++ a) (+ 1 a))
 
-(++ two)
+(define (main) (++ (five)))
