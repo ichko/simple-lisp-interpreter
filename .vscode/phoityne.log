@@ -369,3 +369,12 @@
 2020-12-11 19:56:11 [ThreadId 19] ERROR phoityne - "error: \8226 Variable not in scope: val \8226 Perhaps you meant \8216eval\8217 (line 43)"
 2020-12-11 19:56:11 [ThreadId 19] ERROR phoityne - "error: \8226 Found hole: _a :: t Where: \8216t\8217 is a rigid type variable bound by the inferred type of it :: t at <interactive>:1:1 Or perhaps \8216_a\8217 is mis-spelled, or not in scope \8226 In the expression: _a"
 2020-12-11 19:56:11 [ThreadId 19] ERROR phoityne - "error: \8226 Found hole: _b :: t Where: \8216t\8217 is a rigid type variable bound by the inferred type of it :: t at <interactive>:1:1 Or perhaps \8216_b\8217 is mis-spelled, or not in scope \8226 In the expression: _b"
+2020-12-13 23:50:42.313288100000 [$pid(ThreadId 5)] ERROR APP - user error (variable id:11 not found.)
+2020-12-13 23:52:54.905429500000 [$pid(ThreadId 5)] ERROR APP - user error (variable id:23 not found.)
+2020-12-14 00:08:37.036235500000 [$pid(ThreadId 5)] ERROR APP - user error (variable id:13 not found.)
+2020-12-14 00:09:05.218987500000 [$pid(ThreadId 8)] CRITICAL THREAD_MGR - Critical exit started.
+2020-12-14 00:09:52.516516100000 [$pid(ThreadId 8)] CRITICAL THREAD_MGR - Critical exit started.
+2020-12-14 00:22:53.622900200000 [$pid(ThreadId 5)] ERROR APP - user error (variable id:18 not found.)
+2020-12-14 00:23:08.552695000000 [$pid(ThreadId 5)] ERROR APP - user error (variable id:12 not found.)
+2020-12-14 00:24:30.088879500000 [$pid(ThreadId 5)] ERROR APP - user error (variable id:25 not found.)
+2020-12-14 00:34:59.778483500000 [$pid(ThreadId 5)] ERROR APP - user error (variable id:15 not found.)
