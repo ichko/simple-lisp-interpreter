@@ -1,117 +1,120 @@
 module Interpreter where
 
-import Parser (parseFile)
+import Parser
 import ParserUtils as P
 import Specification
+import Text.Pretty.Simple (pPrint)
 
-data ContextVal
-  = Native Expression
-  | External [Identifier] (Environment -> Either Error Value)
+type Ctx = [(Identifier, HostVal)]
 
-getContextValArgs :: ContextVal -> [Identifier]
-getContextValArgs (Native (Function _ args _)) = args
-getContextValArgs (External args _) = args
-getContextValArgs _ = []
+data HostVal
+  = HostAtom Atom
+  | HostFunc (Ctx -> [Expression] -> Either Error HostVal)
 
-type Environment = [(Identifier, ContextVal)]
+instance Show HostVal where
+  show (HostAtom a) = "HostAtom " ++ show a
+  show (HostFunc f) = "HostFunc (...)"
 
-evalContextVal :: ContextVal -> Environment -> Either Error Value
-evalContextVal (Native expr) env = eval env expr
-evalContextVal (External _ f) env = f env
+eval :: Ctx -> Expression -> Either Error HostVal
+eval _ (Atom a) = Right (HostAtom a)
+eval ctx (Identifier id) =
+  case lookup id ctx of
+    Nothing -> Left $ "identifier missing from context '" ++ id ++ "'"
+    Just hostVal -> Right hostVal
+eval ctx (Application (funcExpr : args)) = do
+  hostVal <- eval ctx funcExpr
+  case hostVal of
+    HostAtom _ -> Left "calling non callable"
+    HostFunc f -> f ctx args
 
-evalFromEnv :: Identifier -> Environment -> Either Error Value
-evalFromEnv identifier env =
-  case lookup identifier env of
-    Nothing -> Left $ "identifier not found " ++ identifier
-    Just contextVal -> evalContextVal contextVal env
-
-evalFunction :: Environment -> Expression -> Either Error Value
-evalFunction env f@(Function name _args expressions) =
-  iterate ((name, Native f) : env) expressions
+define :: Ctx -> [Expression] -> Either Error HostVal
+define outerCtx (Application (Identifier _ : argNames) : body) =
+  Right . HostFunc $ \ctx argsExpr -> do
+    args <- mapM (eval ctx) argsExpr
+    let ids = map (\(Identifier id) -> id) argNames
+        extendedCtx = zip ids args
+    loop (extendedCtx ++ ctx) body
   where
-    iterate :: Environment -> [Expression] -> Either Error Value
-    iterate _env [] = Left "function with no body called"
-    iterate env [expr] = eval env expr
-    iterate env (expr : t) =
-      case expr of
-        v@(Variable id _) -> iterate ((id, Native v) : env) t
-        f@(Function id _ _) -> iterate ((id, Native f) : env) t
-        _ -> iterate env t
+    loop :: Ctx -> [Expression] -> Either Error HostVal
+    loop _ [] = Left "empty body function"
+    loop ctx [expr] = eval ctx expr
+    loop
+      ctx
+      (def@(Application (_ : (Application (Identifier id : _)) : _)) : t) = do
+        hostVal <- eval ctx def
+        loop ((id, hostVal) : ctx) t
+    loop _ exprs = Left $ "error in function definition " ++ show exprs
+define _ expr = Left $ "error in define call" ++ show expr
 
-eval :: Environment -> Expression -> Either Error Value
-eval _ (Atom val) = Right val
-eval env (Reference id) = evalFromEnv id env
-eval env (Variable _id expression) = eval env expression
-eval env (Application id args) = do
-  case lookup id env of
-    (Just contextVal) ->
-      let paramsEnv = zip (getContextValArgs contextVal) (map Native args) ++ env
-       in evalContextVal contextVal paramsEnv
-    _ -> Left $ "trying to call undefined function " ++ id
-eval ctx expr = evalFunction ctx expr
-
-unaryFunc :: (Value -> a) -> (b -> Value) -> (a -> b) -> ContextVal
-unaryFunc unpackA packB op = External ["a", "b"] $ \env -> do
-  a <- evalFromEnv "a" env
-  let _a = unpackA a
-  return . packB $ op _a
-
-binFunc :: (Value -> a) -> (Value -> b) -> (c -> Value) -> (a -> b -> c) -> ContextVal
-binFunc unpackA unpackB packC op = External ["a", "b"] $ \env -> do
-  a <- evalFromEnv "a" env
-  b <- evalFromEnv "b" env
-  let _a = unpackA a
-      _b = unpackB b
-  return . packC $ op _a _b
-
-ifFunc :: ContextVal
-ifFunc = External ["test", "if", "then"] $ \env -> do
-  testExpr <- evalFromEnv "test" env
-  let test = unpackBool testExpr
-  if test
-    then evalFromEnv "if" env
-    else evalFromEnv "then" env
-
-printFunc :: ContextVal
-printFunc = External ["x"] $ \env -> do
-  x <- evalFromEnv "x" env
-  return . StringValue . show $ x
-
-unpackInt :: Value -> Integer
-unpackInt (IntValue a) = a
-
-unpackBool :: Value -> Bool
-unpackBool (BoolValue a) = a
-
-stdEnv :: [(Identifier, ContextVal)]
-stdEnv =
-  [ ("+", binFunc unpackInt unpackInt IntValue (+)),
-    ("-", binFunc unpackInt unpackInt IntValue (-)),
-    ("*", binFunc unpackInt unpackInt IntValue (*)),
-    ("/", binFunc unpackInt unpackInt IntValue div),
-    --
-    (">", binFunc unpackInt unpackInt BoolValue (>)),
-    ("<", binFunc unpackInt unpackInt BoolValue (<)),
-    (">=", binFunc unpackInt unpackInt BoolValue (>=)),
-    ("<=", binFunc unpackInt unpackInt BoolValue (<=)),
-    ("==", binFunc unpackInt unpackInt BoolValue (==)),
-    ("!=", binFunc unpackInt unpackInt BoolValue (/=)),
-    --
-    ("&&", binFunc unpackBool unpackBool BoolValue (&&)),
-    ("||", binFunc unpackBool unpackBool BoolValue (||)),
-    ("~", unaryFunc unpackBool BoolValue not),
-    --
-    ("if", ifFunc),
-    ("print", printFunc)
+std :: [(Identifier, HostVal)]
+std =
+  [ ("define", HostFunc define),
+    ( "if",
+      HostFunc $ \ctx [boolExpr, thenExpr, elseExpr] -> do
+        testVal <- eval ctx boolExpr
+        let (HostAtom (IntValue test)) = testVal
+        if test == 1
+          then eval ctx thenExpr
+          else eval ctx elseExpr
+    ),
+    ( "+",
+      HostFunc $ \ctx [aExpr, bExpr] -> do
+        aVal <- eval ctx aExpr
+        bVal <- eval ctx bExpr
+        let (HostAtom (IntValue a)) = aVal
+            (HostAtom (IntValue b)) = bVal
+        return . HostAtom . IntValue $ a + b
+    ),
+    ( "*",
+      HostFunc $ \ctx [aExpr, bExpr] -> do
+        aVal <- eval ctx aExpr
+        bVal <- eval ctx bExpr
+        let (HostAtom (IntValue a)) = aVal
+            (HostAtom (IntValue b)) = bVal
+        return . HostAtom . IntValue $ a * b
+    ),
+    ( "-",
+      HostFunc $ \ctx [aExpr, bExpr] -> do
+        aVal <- eval ctx aExpr
+        bVal <- eval ctx bExpr
+        let (HostAtom (IntValue a)) = aVal
+            (HostAtom (IntValue b)) = bVal
+        return . HostAtom . IntValue $ a - b
+    ),
+    ( "<=",
+      HostFunc $ \ctx [aExpr, bExpr] -> do
+        aVal <- eval ctx aExpr
+        bVal <- eval ctx bExpr
+        let (HostAtom (IntValue a)) = aVal
+            (HostAtom (IntValue b)) = bVal
+        return . HostAtom . IntValue $ if a <= b then 1 else 0
+    ),
+    ( "==",
+      HostFunc $ \ctx [aExpr, bExpr] -> do
+        aVal <- eval ctx aExpr
+        bVal <- eval ctx bExpr
+        let (HostAtom (IntValue a)) = aVal
+            (HostAtom (IntValue b)) = bVal
+        return . HostAtom . IntValue $ if a == b then 1 else 0
+    )
   ]
 
-evalProgram :: Program -> Either Error Value
-evalProgram (Program program) = eval stdEnv rootExpr
+evalProgram :: Program -> Either Error HostVal
+evalProgram (Program program) = eval std rootExpr
   where
-    rootExpr = Function "#" [] program
+    rootExpr =
+      Application $
+        [ Identifier "define",
+          Application [Identifier "#"]
+        ]
+          ++ program
+          ++ [Application [Identifier "main"]]
 
-interpret :: String -> Either Error Value
-interpret src = evalProgram $ P.parse src
+interpret :: String -> Either Error HostVal
+interpret src = do
+  hostF <- evalProgram (P.parse src)
+  let (HostFunc f) = hostF
+  f std []
 
 interpretFile :: FilePath -> IO ()
 interpretFile path = do
@@ -119,8 +122,23 @@ interpretFile path = do
   let parsed = interpret code
   print parsed
 
-main :: IO ()
-main = do
+main'' :: IO ()
+main'' = do
   -- print $ interpret "(define a 2)"
   -- print $ interpret "(define a (+ 2 2)) (define a (+ 2 3))"
-  print $ interpret "(define ++ (a) (+ 1 a)) (++ 4)"
+  print $ runParser program "(define (a) 1)"
+  print $ interpret "(define (inc a) (+ a 1)) (define (main) (inc 4))"
+  let srcCode =
+        "                            \
+        \ (define (fact n)           \
+        \    (if (== n 0)            \
+        \       1                    \
+        \       (* n (fact (- n 1))) \
+        \    )                       \
+        \ )                          \
+        \ (define (main)             \
+        \    (+ 1 (+ 1 3))           \
+        \ )                          \
+        \                            "
+  -- print $ interpret srcCode
+  pPrint $ runParser program srcCode

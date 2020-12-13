@@ -9,16 +9,13 @@ newtype Program
   deriving (Show)
 
 data Expression
-  = Atom Value
-  | Reference Identifier
-  | Application Identifier [Expression]
-  | Variable Identifier Expression
-  | Function Identifier [Identifier] [Expression]
+  = Atom Atom
+  | Identifier Identifier
+  | Application [Expression]
   deriving (Show)
 
-data Value
+data Atom
   = IntValue Integer
-  | BoolValue Bool
   | StringValue String
-  | ListValue [Expression]
+  | Null
   deriving (Show)
