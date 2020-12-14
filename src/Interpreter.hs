@@ -3,13 +3,16 @@ module Interpreter where
 import Parser
 import ParserUtils as P
 import Specification
-import Text.Pretty.Simple (pPrint)
 
 type Ctx = [(Identifier, HostVal)]
 
 data HostVal
   = HostAtom Atom
   | HostFunc (Ctx -> [Expression] -> Either Error HostVal)
+
+instance Eq HostVal where
+  (HostAtom a) == (HostAtom b) = a == b
+  _ == _ = False
 
 instance Show HostVal where
   show (HostAtom a) = "HostAtom " ++ show a
@@ -28,7 +31,7 @@ eval ctx (Application (funcExpr : args)) = do
     HostFunc f -> f ctx args
 
 define :: Ctx -> [Expression] -> Either Error HostVal
-define outerCtx (Application (Identifier _ : argNames) : body) =
+define _ (Application (Identifier _ : argNames) : body) =
   Right . HostFunc $ \ctx argsExpr -> do
     args <- mapM (eval ctx) argsExpr
     let ids = map (\(Identifier id) -> id) argNames
@@ -38,12 +41,12 @@ define outerCtx (Application (Identifier _ : argNames) : body) =
     loop :: Ctx -> [Expression] -> Either Error HostVal
     loop _ [] = Left "empty body function"
     loop ctx [expr] = eval ctx expr
-    loop
-      ctx
-      (def@(Application (_ : (Application (Identifier id : _)) : _)) : t) = do
-        hostVal <- eval ctx def
-        loop ((id, hostVal) : ctx) t
-    loop _ exprs = Left $ "error in function definition " ++ show exprs
+    loop ctx (h : t) = do
+      case h of
+        def@(Application (_ : (Application (Identifier id : _)) : _)) -> do
+          hostVal <- eval ctx def
+          loop ((id, hostVal) : ctx) t
+        _ -> Left $ "error in function definition " ++ show h
 define _ expr = Left $ "error in define call" ++ show expr
 
 std :: [(Identifier, HostVal)]
@@ -116,11 +119,11 @@ interpret src = do
   let (HostFunc f) = hostF
   f std []
 
-interpretFile :: FilePath -> IO ()
+interpretFile :: FilePath -> IO (HostVal)
 interpretFile path = do
   code <- readFile path
-  let parsed = interpret code
-  print parsed
+  let (Right hostVal) = interpret code
+  return hostVal
 
 main'' :: IO ()
 main'' = do
@@ -140,5 +143,4 @@ main'' = do
         \    (+ 1 (+ 1 3))           \
         \ )                          \
         \                            "
-  -- print $ interpret srcCode
-  pPrint $ runParser program srcCode
+  print $ interpret srcCode

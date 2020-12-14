@@ -33,10 +33,10 @@ program = ws *> (S.Program <$> some (expression <* ws))
 instance Parseable S.Program where
   parser = program
 
-parseFile :: FilePath -> IO (ParserResult S.Program)
+parseFile :: FilePath -> IO (S.Program)
 parseFile path = do
   code <- readFile path
-  let parsed = runParser program code
+  let parsed = parse code
   return parsed
 
 main' :: IO ()

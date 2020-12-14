@@ -12,7 +12,6 @@
 )
 
 (define (main)
-  (define (ten) (twice 5))
+  (define (ten) (twice 10))
   (fib (ten))
 )
-

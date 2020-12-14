@@ -18,4 +18,4 @@ data Atom
   = IntValue Integer
   | StringValue String
   | Null
-  deriving (Show)
+  deriving (Show, Eq)

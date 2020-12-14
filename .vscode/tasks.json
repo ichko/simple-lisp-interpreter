@@ -41,7 +41,15 @@
       "isBackground": true,
       "type": "shell",
       "label": "stack watch",
-      "command": "stack build --test --no-run-tests --file-watch"
+      "command": "stack build --test --file-watch"
+    },
+    {
+      // F9
+      // SRC - <https://github.com/ndmitchell/ghcid/issues/128>
+      "isBackground": true,
+      "type": "shell",
+      "label": "stack ghcid watch",
+      "command": "ghcid -c=\"stack ghci test/Spec.hs\" -T=main"
     }
   ]
 }

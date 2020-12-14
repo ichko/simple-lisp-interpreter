@@ -6,5 +6,5 @@
    )                       
 )                          
 (define (main)             
-   (fact 3)                
+   (fact 10)                
 )
