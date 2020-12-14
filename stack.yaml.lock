@@ -3,7 +3,14 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: shower-0.2.0.2@sha256:22bd866a3a9c3c06b06aa9620292aff8d98f670c5c375d0c74bac1483641b866,1387
+    pantry-tree:
+      size: 2034
+      sha256: 5f64579ca3f37cb246cc4e3e437c459805ec3fb78c12251c7062cd13529c9c92
+  original:
+    hackage: shower-0.2.0.2@sha256:22bd866a3a9c3c06b06aa9620292aff8d98f670c5c375d0c74bac1483641b866,1387
 snapshots:
 - completed:
     size: 532835
