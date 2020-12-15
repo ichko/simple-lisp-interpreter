@@ -1,6 +1,6 @@
 # Simple Lisp (SLISP) Interpreter in Haskell
 
-![Haskell CI](https://github.com/ichko/simple-lisp-interpreter/workflows/Haskell%20CI/badge.svg)
+![build-and-test](https://github.com/ichko/simple-lisp-interpreter/workflows/build-and-test/badge.svg)
 
 This repository contains interpreter of simple `lisp-like` language called `slisp`.
 

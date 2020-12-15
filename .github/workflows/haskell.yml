@@ -1,4 +1,10 @@
-on: [push]
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - "**/README.md"
+
 name: build-and-test
 jobs:
   run-tests:
